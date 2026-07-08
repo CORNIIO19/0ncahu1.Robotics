@@ -1,0 +1,7 @@
+Formato para la documentación taller de robots:
+
+-Justificado
+-Titulos: Verdana 20 pt
+-Subtitulos: Cascadia Mono SemiLigth 16 pt
+-Contenido: Cambrian Math 12 pt
+-Bibliografía fuentes: bahnschrift Light SemiCondensed 12 pt
