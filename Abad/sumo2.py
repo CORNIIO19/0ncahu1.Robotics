@@ -1,11 +1,12 @@
 # =============================================================
-#  MODO SUMO v3 - mBot2 (Upload mode, MicroPython)
-#  Cambio clave respecto a v2:
-#   is_line() devolvia True todo el tiempo (evasion permanente).
-#   Ahora se usan los valores CRUDOS de gris (get_gray) con
-#   AUTOCALIBRACION al inicio: al presionar A, el robot lee el
-#   fondo claro del ring y fija su propio umbral por sonda.
-#   Linea negra = valor de gris muy por debajo del fondo.
+#  MODO SUMO v4 - mBot2 (Upload mode, MicroPython)
+#  Cambios respecto a v3:
+#   - SENTIDO: si el robot camina "de reversa" (los sensores
+#     quedan atras), pon SENTIDO = -1 y todo se invierte.
+#   - PARAR_EN_BORDE: al pisar la linea negra el robot se
+#     DETIENE, suena, muestra que lado la vio y espera el
+#     boton A para continuar. Sirve para verificar deteccion.
+#     Para competir de verdad, pon PARAR_EN_BORDE = False.
 # =============================================================
 
 import cyberpi
@@ -15,26 +16,30 @@ import time
 import random
 
 # ---------------- CONFIGURACION ----------------
-MODO_DEBUG    = False # True = imprime sensores, motores apagados
-FACTOR_NEGRO  = 0.5   # umbral = fondo * factor (0.5 = mitad del brillo)
-DIST_ATAQUE   = 40    # cm para considerar "rival visto"
-POT_ATAQUE    = 85
-POT_BUSQUEDA  = 50
-POT_AVANCE    = 60
-POT_RETRO     = 80
-T_RETRO       = 0.50
-T_GIRO_MIN    = 0.35
-T_GIRO_MAX    = 0.65
-T_GIRO_BUSQ   = 0.40
-T_AVANCE_BUSQ = 0.80
+MODO_DEBUG     = False # True = imprime sensores, motores apagados
+PARAR_EN_BORDE = True  # True = se detiene al ver la linea (prueba)
+SENTIDO        = 1     # -1 si el robot avanza al reves de lo esperado
+FACTOR_NEGRO   = 0.5   # umbral = fondo * factor
+DIST_ATAQUE    = 40
+POT_ATAQUE     = 85
+POT_BUSQUEDA   = 50
+POT_AVANCE     = 60
+POT_RETRO      = 80
+T_RETRO        = 0.50
+T_GIRO_MIN     = 0.35
+T_GIRO_MAX     = 0.65
+T_GIRO_BUSQ    = 0.40
+T_AVANCE_BUSQ  = 0.80
 
 SONDAS = ["L2", "L1", "R1", "R2"]
 
 # ---------------- MOVIMIENTO ----------------
+# Motor derecho en espejo. SENTIDO invierte que lado es "el frente":
+# el frente correcto es donde estan el quad RGB y el ultrasonico.
 
 def recto(p):
     if not MODO_DEBUG:
-        mbot2.drive_power(p, -p)
+        mbot2.drive_power(SENTIDO * p, -SENTIDO * p)
 
 def girar(p, direccion):
     if not MODO_DEBUG:
@@ -46,14 +51,13 @@ def parar():
 # ---------------- SENSORES ----------------
 
 def leer_gris(sonda):
-    # Valor de reflejo 0-255 aprox. Fondo claro = alto, negro = bajo.
     return mbuild.quad_rgb_sensor.get_gray(sonda, 1)
 
-umbral = {}  # umbral por sonda, se llena en la calibracion
+umbral = {}
 
 def calibrar():
-    """Con el robot sobre el FONDO CLARO del ring, mide cada sonda
-    varias veces y fija el umbral de negro por sonda."""
+    """Con el robot sobre el FONDO CLARO (dentro del ring, sin pisar
+    la linea), mide cada sonda y fija el umbral de negro."""
     global umbral
     suma = {}
     for s in SONDAS:
@@ -64,8 +68,7 @@ def calibrar():
             suma[s] += leer_gris(s)
         time.sleep(0.02)
     for s in SONDAS:
-        fondo = suma[s] / N
-        umbral[s] = fondo * FACTOR_NEGRO
+        umbral[s] = (suma[s] / N) * FACTOR_NEGRO
     cyberpi.console.println("Umbrales:")
     cyberpi.console.println(str(int(umbral["L2"])) + " " +
                             str(int(umbral["L1"])) + " " +
@@ -73,7 +76,6 @@ def calibrar():
                             str(int(umbral["R2"])))
 
 def borde():
-    """'izq', 'der' o None segun que lado pisa la linea negra."""
     izq = (leer_gris("L1") < umbral["L1"] or
            leer_gris("L2") < umbral["L2"])
     der = (leer_gris("R1") < umbral["R1"] or
@@ -102,12 +104,29 @@ def evadir(lado):
     parar()
     return direccion
 
+def prueba_borde(lado):
+    """Se detiene al ver la linea y espera el boton A."""
+    parar()
+    cyberpi.led.on(0, 255, 0)           # verde = linea detectada
+    cyberpi.audio.play_tone(900, 0.2)
+    cyberpi.console.clear()
+    cyberpi.console.println("BORDE: " + lado)
+    cyberpi.console.println("L2 L1 R1 R2")
+    cyberpi.console.println(str(leer_gris("L2")) + " " +
+                            str(leer_gris("L1")) + " " +
+                            str(leer_gris("R1")) + " " +
+                            str(leer_gris("R2")))
+    cyberpi.console.println("A = continuar")
+    while not cyberpi.controller.is_press("a"):
+        time.sleep(0.05)
+    cyberpi.console.clear()
+
 # ---------------- SECUENCIA DE INICIO ----------------
 
 cyberpi.console.clear()
-cyberpi.console.println("MODO SUMO v3")
-cyberpi.console.println("Pon el robot sobre")
-cyberpi.console.println("el fondo claro y")
+cyberpi.console.println("MODO SUMO v4")
+cyberpi.console.println("Robot DENTRO del")
+cyberpi.console.println("ring, fondo claro,")
 cyberpi.console.println("presiona A")
 cyberpi.led.on(255, 255, 255)
 
@@ -116,7 +135,6 @@ while not cyberpi.controller.is_press("a"):
 
 calibrar()
 
-# --- MODO DEBUG: valores crudos en pantalla, sin motores ---
 if MODO_DEBUG:
     while True:
         cyberpi.console.clear()
@@ -129,7 +147,6 @@ if MODO_DEBUG:
         cyberpi.console.println("dist: " + str(mbuild.ultrasonic2.get(1)))
         time.sleep(0.3)
 
-# Cuenta regresiva de 5 s
 for i in range(5, 0, -1):
     cyberpi.console.println("Inicio en " + str(i))
     cyberpi.audio.play_tone(700, 0.15)
@@ -150,8 +167,13 @@ while True:
     lado = borde()
 
     if lado is not None:
-        d = evadir(lado)
-        dir_busqueda = d
+        if PARAR_EN_BORDE:
+            prueba_borde(lado)          # se detiene y espera A
+            recto(-POT_RETRO)           # se aparta de la linea
+            time.sleep(T_RETRO)
+            parar()
+        else:
+            dir_busqueda = evadir(lado)
         girando = False
         cyberpi.timer.reset()
         estado_prev = "evade"
