@@ -1,0 +1,218 @@
+# =============================================================
+#  MODO SUMO v10 - mBot2 (Upload mode, MicroPython)
+#  Cambios sobre v9:
+#   - Se agrega un MODO_CALIBRACION opcional para leer en vivo
+#     los valores del sensor quad rgb (piso vs cinta) y poder
+#     ajustar UMBRAL_NEGRO con datos reales.
+#   - Motivo: al subir POT_ATAQUE el robot cruza la cinta negra
+#     mas rapido, asi que el sensor tiene menos tiempo/menos
+#     lecturas para "pescarla" al pasar. Si sigue fallando
+#     despues de calibrar, la otra perilla es bajar POT_ATAQUE
+#     un poco (velocidad vs. deteccion siempre es un trade-off).
+#
+#  La logica de prioridades NO cambio, porque ya hace lo que
+#  pediste:
+#   1) El borde (linea negra) SIEMPRE se revisa primero, en cada
+#      vuelta del loop, antes que el ataque. Por eso nunca deja
+#      de vigilar el borde mientras empuja.
+#   2) Mientras ataca, el robot empuja siempre en linea recta
+#      (recto(POT_ATAQUE)), sin girar, y desde v9 sigue empujando
+#      aunque pierda al rival un instante (CICLOS_PERSISTENCIA_ATAQUE),
+#      hasta que su propio sensor detecte el borde (senal de que ya
+#      esta al filo del ring, momento en el que el rival normalmente
+#      ya salio o esta saliendo) o hasta que realmente pierda al
+#      rival por mas tiempo del de persistencia.
+#
+#  Boton A = iniciar. Boton B durante la pelea = paro.
+# =============================================================
+
+import cyberpi
+import mbot2
+import mbuild
+import time
+import random
+
+# ---------------- CONFIGURACION ----------------
+UMBRAL_NEGRO  = 15    # gris < esto = cinta negra (piso 27-31, cinta 5-7)
+                       # si la deteccion falla, usa MODO_CALIBRACION
+                       # de abajo para ver los valores reales y ajustar
+
+DIST_ATAQUE   = 40    # cm para considerar "rival visto"
+
+# Potencias para RUEDAS. Si algun motor no arranca, sube de 5 en 5.
+POT_ATAQUE    = 70    # empuje (si el borde se detecta mal a esta
+                       # potencia incluso ya calibrado, bajalo de
+                       # 5 en 5: mas velocidad = menos margen para
+                       # que el sensor alcance a leer la cinta)
+POT_BUSQUEDA  = 30    # giro buscando
+POT_AVANCE    = 32    # avance buscando
+POT_RETRO     = 40    # retroceso al ver la cinta
+POT_GIRO_EVA  = 35    # giro al evadir
+
+T_RETRO       = 0.45
+T_GIRO_MIN    = 0.25
+T_GIRO_MAX    = 0.50
+T_GIRO_BUSQ   = 0.30
+T_AVANCE_BUSQ = 0.60
+
+# Ciclos de loop (~0.01s cada uno) que sigue empujando despues de
+# perder la lectura del rival, antes de rendirse y pasar a buscar.
+CICLOS_PERSISTENCIA_ATAQUE = 40   # aprox. 0.4s (ajustable)
+
+# ---------------- MOVIMIENTO ----------------
+# Motor derecho en espejo: recto = (p, -p)
+
+def recto(p):
+    mbot2.drive_power(p, -p)
+
+def girar(p, direccion):
+    mbot2.drive_power(direccion * p, direccion * p)
+
+def parar():
+    mbot2.drive_power(0, 0)
+
+# ---------------- SENSORES ----------------
+
+def leer(sonda):
+    return mbuild.quad_rgb_sensor.get_gray(sonda, 1)
+
+def borde():
+    """'izq', 'der' o None segun que lado pisa la cinta negra."""
+    izq = (leer("L1") < UMBRAL_NEGRO or leer("L2") < UMBRAL_NEGRO)
+    der = (leer("R1") < UMBRAL_NEGRO or leer("R2") < UMBRAL_NEGRO)
+    if izq:
+        return "izq"
+    if der:
+        return "der"
+    return None
+
+def rival_cerca():
+    d = mbuild.ultrasonic2.get(1)
+    return 0 < d < DIST_ATAQUE
+
+# ---------------- COMPORTAMIENTOS ----------------
+
+def evadir(lado):
+    cyberpi.led.on(0, 0, 255)          # azul = evasion
+    parar()
+    time.sleep(0.05)
+    recto(-POT_RETRO)
+    time.sleep(T_RETRO)
+    direccion = 1 if lado == "izq" else -1
+    girar(POT_GIRO_EVA, direccion)
+    time.sleep(T_GIRO_MIN + random.random() * (T_GIRO_MAX - T_GIRO_MIN))
+    parar()
+
+# ---------------- MODO CALIBRACION (opcional) ----------------
+# Pon MODO_CALIBRACION en True, sube el programa, y coloca el
+# robot primero sobre el piso blanco y luego sobre la cinta negra
+# mientras lees los valores en la consola. Con esos numeros reales
+# ajusta UMBRAL_NEGRO arriba (debe quedar entre el valor de piso y
+# el de cinta). Cuando termines, vuelve a poner MODO_CALIBRACION en
+# False y sube el programa de nuevo para pelear.
+MODO_CALIBRACION = False
+
+if MODO_CALIBRACION:
+    cyberpi.console.clear()
+    while True:
+        cyberpi.console.clear()
+        cyberpi.console.println("L1:" + str(leer("L1")) + "  L2:" + str(leer("L2")))
+        cyberpi.console.println("R1:" + str(leer("R1")) + "  R2:" + str(leer("R2")))
+        cyberpi.console.println("UMBRAL actual: " + str(UMBRAL_NEGRO))
+        time.sleep(0.2)
+
+# ---------------- INICIO ----------------
+
+parar()
+cyberpi.console.clear()
+cyberpi.console.println("MODO SUMO v10")
+cyberpi.console.println("Boton A = iniciar")
+cyberpi.led.on(255, 255, 255)
+
+while not cyberpi.controller.is_press("a"):
+    time.sleep(0.05)
+
+for i in range(5, 0, -1):
+    cyberpi.console.clear()
+    cyberpi.console.println("Inicio en " + str(i))
+    cyberpi.audio.play_tone(700, 0.15)
+    time.sleep(0.85)
+
+cyberpi.console.clear()
+cyberpi.console.println("LUCHA!")
+cyberpi.audio.play_tone(1200, 0.3)
+
+dir_busqueda = random.choice([1, -1])
+girando = True
+estado_prev = ""
+ciclos_sin_rival = 0
+cyberpi.timer.reset()
+
+# ---------------- BUCLE PRINCIPAL ----------------
+
+while True:
+
+    if cyberpi.controller.is_press("b"):
+        parar()
+        cyberpi.led.on(255, 255, 255)
+        cyberpi.console.clear()
+        cyberpi.console.println("PARO - A = seguir")
+        while not cyberpi.controller.is_press("a"):
+            time.sleep(0.05)
+        time.sleep(0.3)
+        cyberpi.timer.reset()
+        estado_prev = ""
+        ciclos_sin_rival = 0
+        continue
+
+    lado = borde()
+
+    # PRIORIDAD 1: no salir del ring (siempre se revisa primero,
+    # incluso mientras esta empujando/atacando)
+    if lado is not None:
+        evadir(lado)
+        girando = True
+        cyberpi.timer.reset()
+        estado_prev = "evade"
+        ciclos_sin_rival = 0
+        continue
+
+    # PRIORIDAD 2: atacar en linea recta
+    if rival_cerca():
+        ciclos_sin_rival = 0
+        if estado_prev != "ataque":
+            cyberpi.led.on(255, 0, 0)
+            estado_prev = "ataque"
+        recto(POT_ATAQUE)
+        time.sleep(0.01)
+        continue
+
+    # Veniamos empujando y el sensor dejo de ver al rival de golpe
+    # (comun al estar pegados: punto ciego del ultrasonico a muy
+    # corta distancia). No soltamos el empuje de inmediato: seguimos
+    # empujando derecho un rato antes de rendirnos y pasar a buscar.
+    if estado_prev == "ataque" and ciclos_sin_rival < CICLOS_PERSISTENCIA_ATAQUE:
+        ciclos_sin_rival += 1
+        recto(POT_ATAQUE)
+        time.sleep(0.01)
+        continue
+
+    # PRIORIDAD 3: buscar
+    if estado_prev != "busca":
+        cyberpi.led.on(255, 180, 0)
+        estado_prev = "busca"
+
+    t = cyberpi.timer.get()
+    if girando:
+        girar(POT_BUSQUEDA, dir_busqueda)
+        if t > T_GIRO_BUSQ:
+            girando = False
+            cyberpi.timer.reset()
+    else:
+        recto(POT_AVANCE)
+        if t > T_AVANCE_BUSQ:
+            girando = True
+            dir_busqueda = random.choice([1, -1])
+            cyberpi.timer.reset()
+
+    time.sleep(0.01)
