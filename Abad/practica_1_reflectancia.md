@@ -44,7 +44,7 @@ while True:
 
 ---
 
-## Parte A — Tabla de superficies
+## Ejercicio A — Tabla de superficies
 
 Colocar el robot sobre cada superficie y anotar el valor del sensor L1 (segundo canal).
 
@@ -60,7 +60,7 @@ Colocar el robot sobre cada superficie y anotar el valor del sensor L1 (segundo 
 
 ---
 
-## Parte B — Cálculo del umbral
+## Ejercicio B — Cálculo del umbral
 
 1. Umbral = (lectura sobre blanco + lectura sobre negro) / 2 = __________
 
@@ -74,7 +74,7 @@ Colocar el robot sobre cada superficie y anotar el valor del sensor L1 (segundo 
 
 ---
 
-## Parte C — Efecto de la altura
+## Ejercicio C — Efecto de la altura
 
 Medir sobre blanco y sobre negro a distintas alturas. El contraste es la diferencia entre ambas lecturas.
 
