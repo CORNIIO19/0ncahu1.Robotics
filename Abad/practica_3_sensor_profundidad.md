@@ -1,12 +1,14 @@
-# Práctica 2 — ¿Pasos para correr?
+# Práctica 2 — ¿Que tan profundo es?
 
-**Sensor dos motores paso a paso del mBot2**
+**Sensor Ultrasonico del mBot2**
 
 ---
 
 ## Objetivos
 
--
+- Distinguir entre "color" y "reflectancia"
+- Determinar el umbral que separa la línea del fondo
+- Medir cómo la altura del sensor afecta el contraste
 
 ## Material
 
@@ -20,26 +22,36 @@
 ---
 
 ## Programa
-```import mbot2
-    import time
-
-mbot2.drive_power(100, -100)
-time.sleep(2)
-mbot2.drive_power(0, 0)
 ```
+import mbuild
+import cyberpi
+import time
+
+mbuild.quad_rgb_sensor.color_mode("enhance")
+
+while True:
+    offset = mbuild.quad_rgb_sensor.get_offset_track(1)
+    cyberpi.console.clear()
+    cyberpi.console.println(offset)
+    time.sleep(0.3)
+```
+
 ---
 
 ## Ejercicio A — 
+
 
 ---
 
 ## Ejercicio B — 
 
-   __________
+
 
 ---
 
 ## Ejercicio C — 
+
+
 
 ---
 
